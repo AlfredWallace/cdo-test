@@ -18,7 +18,7 @@ class Document
     #[ORM\Column(length: 1)]
     private ?string $type = null;
 
-    #[ORM\Column(length: 255)]
+    #[ORM\Column(length: 255, unique: true)]
     private ?string $number = null;
 
     #[ORM\Column]

@@ -18,7 +18,7 @@ abstract class Company
     #[ORM\Column]
     protected ?int $id = null;
 
-    #[ORM\Column(length: 7)]
+    #[ORM\Column(length: 7, unique: true)]
     protected ?string $code = null;
 
     #[ORM\Column(length: 255)]
