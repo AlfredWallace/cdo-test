@@ -6,6 +6,7 @@ use App\Repository\DocumentRepository;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: DocumentRepository::class)]
+#[ORM\HasLifecycleCallbacks]
 class Document
 {
     use CreatedAtTrait;

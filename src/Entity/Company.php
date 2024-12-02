@@ -9,6 +9,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\InheritanceType("SINGLE_TABLE")]
 #[ORM\DiscriminatorColumn(name: "discriminator", type: "string")]
 #[ORM\DiscriminatorMap(['provider' => Provider::class, 'member' => Member::class])]
+#[ORM\HasLifecycleCallbacks]
 abstract class Company
 {
     use CreatedAtTrait;
