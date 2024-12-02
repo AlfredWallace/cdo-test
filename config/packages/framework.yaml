@@ -8,6 +8,10 @@ framework:
 
     #esi: true
     #fragments: true
+    http_client:
+        scoped_clients:
+            cdo_demo.client:
+                base_uri: 'https://api-demo.cdo.fr/api/'
 
 when@test:
     framework:
