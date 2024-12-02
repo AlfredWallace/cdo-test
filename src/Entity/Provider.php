@@ -2,9 +2,10 @@
 
 namespace App\Entity;
 
-use Doctrine\ORM\Mapping\Entity;
+use App\Repository\ProviderRepository;
+use Doctrine\ORM\Mapping as ORM;
 
-#[Entity]
+#[ORM\Entity(repositoryClass: ProviderRepository::class)]
 class Provider extends Company
 {
 

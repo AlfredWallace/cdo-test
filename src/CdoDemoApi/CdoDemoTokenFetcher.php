@@ -39,8 +39,7 @@ readonly class CdoDemoTokenFetcher
                 ->setName(self::CREDENTIALS_NAME)
                 ->setBearer($token);
 
-            $this->credentialsRepository->persist($credentials);
-            $this->credentialsRepository->flush();
+            $this->credentialsRepository->saveCredentials($credentials);
         }
 
         return $credentials->getBearer();

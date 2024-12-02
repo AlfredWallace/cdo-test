@@ -2,9 +2,10 @@
 
 namespace App\Entity;
 
-use Doctrine\ORM\Mapping\Entity;
+use App\Repository\MemberRepository;
+use Doctrine\ORM\Mapping as ORM;
 
-#[Entity]
+#[ORM\Entity(repositoryClass: MemberRepository::class)]
 class Member extends Company
 {
 

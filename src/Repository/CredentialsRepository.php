@@ -16,13 +16,9 @@ class CredentialsRepository extends ServiceEntityRepository
         parent::__construct($registry, Credentials::class);
     }
 
-    public function persist(Credentials $credentials): void
+    public function saveCredentials(Credentials $credentials): void
     {
         $this->getEntityManager()->persist($credentials);
-    }
-
-    public function flush(): void
-    {
         $this->getEntityManager()->flush();
     }
 }
