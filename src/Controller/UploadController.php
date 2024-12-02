@@ -2,7 +2,7 @@
 
 namespace App\Controller;
 
-use App\CdoDemo\CdoDemoClient;
+use App\CdoDemoApi\CdoDemoClient;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;

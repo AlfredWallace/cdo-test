@@ -1,6 +1,6 @@
 <?php
 
-namespace App\CdoDemo;
+namespace App\CdoDemoApi;
 
 use App\Exception\CdoDemoException;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
