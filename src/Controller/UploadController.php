@@ -2,7 +2,7 @@
 
 namespace App\Controller;
 
-use App\CdoDemoApi\CdoDemoClient;
+use App\CdoDemoApi\CdoDemoTokenFetcher;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -23,12 +23,12 @@ class UploadController extends AbstractController
      * @throws ClientExceptionInterface
      */
     #[Route('/upload', name: 'upload')]
-    public function upload(CdoDemoClient $cdoDemoClient): Response
+    public function upload(CdoDemoTokenFetcher $cdoDemoTokenFetcher): Response
     {
         return $this->render(
             'upload/index.html.twig',
             [
-                'token' => $cdoDemoClient->getToken()
+                'token' => $cdoDemoTokenFetcher->fetchToken()
             ]
         );
     }

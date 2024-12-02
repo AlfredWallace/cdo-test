@@ -34,10 +34,10 @@ class CdoDemoClient
      * @throws TransportExceptionInterface
      * @throws ServerExceptionInterface
      * @throws RedirectionExceptionInterface
-     * @throws ClientExceptionInterface
      * @throws DecodingExceptionInterface
+     * @throws ClientExceptionInterface
      */
-    public function getToken(): string
+    public function loginCheck(): string
     {
         $response = $this->httpClient->request(
             'POST',
@@ -54,6 +54,10 @@ class CdoDemoClient
 
         if (!array_key_exists('token', $content)) {
             throw new CdoDemoException(message: "Key 'token' not found in CDO Demo API response.");
+        }
+
+        if (empty($content['token'])) {
+            throw new CdoDemoException(message: "Value at 'token' key in CDO Demo API response is empty.");
         }
 
         return $content['token'];
