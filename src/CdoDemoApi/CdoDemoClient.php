@@ -101,4 +101,30 @@ class CdoDemoClient
         $response = $this->cdoDemoClient->request('GET', 'providers/' . $id, ['auth_bearer' => $this->getToken()]);
         return $response->toArray();
     }
+
+    /**
+     * @throws TransportExceptionInterface
+     * @throws ServerExceptionInterface
+     * @throws RedirectionExceptionInterface
+     * @throws DecodingExceptionInterface
+     * @throws ClientExceptionInterface
+     */
+    public function members(): array
+    {
+        $response = $this->cdoDemoClient->request('GET', 'members', ['auth_bearer' => $this->getToken()]);
+        return $response->toArray();
+    }
+
+    /**
+     * @throws TransportExceptionInterface
+     * @throws ServerExceptionInterface
+     * @throws RedirectionExceptionInterface
+     * @throws DecodingExceptionInterface
+     * @throws ClientExceptionInterface
+     */
+    public function member(int $id): array
+    {
+        $response = $this->cdoDemoClient->request('GET', 'members/' . $id, ['auth_bearer' => $this->getToken()]);
+        return $response->toArray();
+    }
 }
