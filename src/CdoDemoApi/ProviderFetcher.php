@@ -44,6 +44,11 @@ class ProviderFetcher
             $this->setProvidersFromApi();
         }
 
+        // Check si le code fourni existe bien côté résultat API
+        if (!array_key_exists($providerCode, $this->memoizedProviders)) {
+            throw new CdoDemoException("{$providerCode} is not a valid provider");
+        }
+
         // Maintenant qu'on a les données en cache, on va insérer en base le provider
         $providerData = $this->cdoDemoClient->provider($this->memoizedProviders[$providerCode]['id']);
         $provider = new Provider();
@@ -70,7 +75,6 @@ class ProviderFetcher
         }
 
         foreach ($providersResponse['member'] as $providerData) {
-
             // On va faire 2 vérifications non bloquantes
 
             if (!array_key_exists('code', $providerData)) {
@@ -83,7 +87,15 @@ class ProviderFetcher
                 continue;
             }
 
-            $this->memoizedProviders[$providerData['code']] = $providerData;
+            if (!array_key_exists('name', $providerData)) {
+                $this->logger->error("Pas de clef 'name' dans la réponse d'API.", ['provider data' => $providerData]);
+                continue;
+            }
+
+            $this->memoizedProviders[$providerData['code']] = [
+                'id' => $providerData['id'],
+                'name' => $providerData['name']
+            ];
         }
     }
 }
