@@ -15,4 +15,22 @@ class DocumentRepository extends ServiceEntityRepository
     {
         parent::__construct($registry, Document::class);
     }
+
+    public function saveDocument(Document $document, bool $flush = false): void
+    {
+        $this->getEntityManager()->persist($document);
+        if ($flush) {
+            $this->getEntityManager()->flush();
+        }
+    }
+
+    public function flushDocuments(): void
+    {
+        $this->getEntityManager()->flush();
+    }
+
+    public function clearDocuments(): void
+    {
+        $this->getEntityManager()->clear();
+    }
 }
