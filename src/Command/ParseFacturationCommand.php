@@ -34,7 +34,6 @@ use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 )]
 class ParseFacturationCommand extends Command
 {
-    private const INFINITY = "infinity";
     private const CSV_NB_COLS = 9;
 
     private array $providers = [];
