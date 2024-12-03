@@ -1,5 +1,8 @@
 {% extends 'base.html.twig' %}
 
 {% block body %}
-    Hello
+    {{ form_start(form) }}
+    {{ form_row(form.facturationFile) }}
+    {{ form_row(form.submit) }}
+    {{ form_end(form) }}
 {% endblock %}
