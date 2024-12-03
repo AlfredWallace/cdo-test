@@ -22,6 +22,11 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface;
+use Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface;
+use Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface;
+use Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface;
+use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 
 #[AsCommand(
     name: 'app:parse-facturation',
@@ -55,54 +60,122 @@ class ParseFacturationCommand extends Command
     {
         $this
             ->addArgument('filePath', InputArgument::REQUIRED, "Path of Facturation file to parse.")
-            ->addOption('limit', 'l', InputOption::VALUE_REQUIRED, 'Limit number of lines to parse.', self::INFINITY)
+            ->addOption('limit', 'l', InputOption::VALUE_REQUIRED, 'Limit number of lines to parse.', "0")
             ->addOption('chunckSize', 'c', InputOption::VALUE_REQUIRED, 'Number of rows to save in one batch.', "50");
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        if ($this->filesystem->exists($this->errorFilePath)) {
-            $this->filesystem->remove($this->errorFilePath);
-        }
-        $this->filesystem->dumpFile($this->errorFilePath, "");
-
         $io = new SymfonyStyle($input, $output);
 
         try {
-            $io->info("Loading providers from API...");
-            $this->providers = $this->providerFetcher->getAvailableProvidersFromApi();
-            $io->info(count($this->providers) . " providers available.");
+            $this->initErrorFile();
+            $dumpErrorsInFile = true;
+        } catch (\Throwable $t) {
+            $io->warning("Could not init the error file, processing anyway (" . $t->getMessage() . ").");
+            $dumpErrorsInFile = false;
+        }
 
-            $io->info("Loading members from API...");
-            $this->members = $this->memberFetcher->getAvailableMembersFromApi();
-            $io->info(count($this->members) . " members available.");
-        } catch (\Throwable $exception) {
-            $io->error($exception->getMessage());
+        try {
+            $this->initDataFromApi($io);
+        } catch (\Throwable $t) {
+            $io->error($t->getMessage());
             return Command::FAILURE;
         }
 
         $io->info("Starting facturation file analysis...");
         $linesToSave = [];
 
-        $filePath = $input->getArgument('filePath');
-        $limit = $input->getOption('limit');
-        $chunkSize = $input->getOption('chunckSize');
+        $limit = $this->getSanitizedLimit($input, $io);
+        $chunkSize = $this->getSanitizedChunkSize($input, $io);
+        $file = $this->getFacturationFileObject($input);
 
-        // Si la limite n'est pas infinie, alors on check si on a bien uniquement des nombres, et pas zéro
-        if ($limit !== self::INFINITY) {
-            if ((!ctype_digit($limit) || (int)$limit === 0)) {
-                $io->error('Limit must be an integer > 0.');
-                return Command::FAILURE;
+        $io->progressStart();
+        foreach ($file as $lineNumber => $line) {
+            try {
+                if ($limit > 0 && $lineNumber + 1 > $limit) {
+                    $io->info("Exiting at limit $limit.");
+                    break;
+                }
+
+                $io->progressAdvance();
+
+                $linesToSave[] = $this->getSanitizedLine($lineNumber, $line);
+
+                if ($this->endOfChunk($linesToSave, $chunkSize)) {
+                    $this->saveLines($linesToSave);
+                }
+            } catch (\Throwable $exception) {
+                if ($dumpErrorsInFile) {
+                    $this->filesystem->appendToFile($this->errorFilePath, $exception->getMessage() . PHP_EOL);
+                }
             }
 
-            $limit = (int)$limit;
+            if ($this->endOfChunk($linesToSave, $chunkSize)) {
+                unset($linesToSave);
+                $linesToSave = [];
+            }
         }
 
-        if (!ctype_digit($chunkSize) || (int)$chunkSize === 0) {
+        $io->progressFinish();
+        $io->success("Parsing finished.");
+
+        return Command::SUCCESS;
+    }
+
+    private function initErrorFile(): void
+    {
+        if ($this->filesystem->exists($this->errorFilePath)) {
+            $this->filesystem->remove($this->errorFilePath);
+        }
+        $this->filesystem->dumpFile($this->errorFilePath, "");
+    }
+
+    /**
+     * @throws RedirectionExceptionInterface
+     * @throws DecodingExceptionInterface
+     * @throws ClientExceptionInterface
+     * @throws TransportExceptionInterface
+     * @throws ServerExceptionInterface
+     */
+    private function initDataFromApi(SymfonyStyle $io): void
+    {
+        $io->info("Loading providers from API...");
+        $this->providers = $this->providerFetcher->getAvailableProvidersFromApi();
+        $io->info(count($this->providers) . " providers available.");
+
+        $io->info("Loading members from API...");
+        $this->members = $this->memberFetcher->getAvailableMembersFromApi();
+        $io->info(count($this->members) . " members available.");
+    }
+
+    private function getSanitizedLimit(InputInterface $input, SymfonyStyle $io): int
+    {
+        $limit = $input->getOption('limit');
+
+        if (!ctype_digit($limit)) {
+            $io->error('Limit must be an integer >= 0. 0 means no limit.');
+            return Command::FAILURE;
+        }
+
+        return (int)$limit;
+    }
+
+    private function getSanitizedChunkSize(InputInterface $input, SymfonyStyle $io): int
+    {
+        $chunkSize = $input->getOption('chunckSize');
+
+        if (!ctype_digit($chunkSize) || $chunkSize === "0") {
             $io->error('Chunk size must be an integer > 0.');
             return Command::FAILURE;
         }
-        $chunkSize = (int)$chunkSize;
+
+        return (int)$chunkSize;
+    }
+
+    private function getFacturationFileObject(InputInterface $input): SplFileObject
+    {
+        $filePath = $input->getArgument('filePath');
 
         $file = new SplFileObject($filePath, 'r');
         $file->setFlags(
@@ -113,113 +186,7 @@ class ParseFacturationCommand extends Command
         );
         $file->setCsvControl(";");
 
-        $io->progressStart();
-        foreach ($file as $lineNumber => $line) {
-            try {
-                if ($limit !== null && $lineNumber + 1 > $limit) {
-                    $io->success("Exiting at limit $limit.");
-                    break;
-                }
-
-                $io->progressAdvance();
-
-                $linesToSave[] = $this->getSanitizedLine($lineNumber, $line);
-
-                if (count($linesToSave) % $chunkSize === 0) {
-                    try {
-                        $this->saveLines($linesToSave);
-                    } catch (\Throwable $exception) {
-                        $io->error($exception->getMessage());
-                    }
-                    unset($linesToSave);
-                    $linesToSave = [];
-                }
-            } catch (\Throwable $exception) {
-                $this->filesystem->appendToFile($this->errorFilePath, $exception->getMessage() . PHP_EOL);
-                continue;
-            }
-        }
-
-        $io->progressFinish();
-
-        return Command::SUCCESS;
-    }
-
-    private function saveLines(array $lines): void
-    {
-        $members = [];
-        $providers = [];
-        $documents = [];
-
-        foreach ($lines as $line) {
-            [
-                $providerCode,
-                $documentNumber,
-                $memberCode,
-                $documentType,
-                $htProduct,
-                $vatProduct,
-                $htTransport,
-                $vatTransport,
-                $totalTtc
-            ] = $line;
-
-            $document = $this->documentRepository->findOneBy(['number' => $documentNumber]);
-            if ($document !== null) {
-                continue;
-            }
-            $document = new Document();
-            $document
-                ->setType($documentType)
-                ->setNumber($documentNumber)
-                ->setHtProduct($htProduct)
-                ->setVatProduct($vatProduct)
-                ->setHtTransport($htTransport)
-                ->setVatTransport($vatTransport)
-                ->setTotalTtc($totalTtc);
-            $this->documentRepository->saveDocument($document);
-            $documents[] = $document;
-
-            if (!array_key_exists($providerCode, $providers)) {
-                $provider = $this->providerRepository->findOneBy(['code' => $providerCode]);
-                if ($provider === null) {
-                    $provider = new Provider();
-                    $provider
-                        ->setCode($providerCode)
-                        ->setName($this->providers[$providerCode]);
-                    $this->providerRepository->saveProvider($provider);
-                }
-                $providers[$providerCode] = $provider;
-            }
-
-            if (!array_key_exists($memberCode, $members)) {
-                $member = $this->memberRepository->findOneBy(['code' => $memberCode]);
-                if ($member === null) {
-                    $member = new Member();
-                    $member
-                        ->setCode($memberCode)
-                        ->setName($this->members[$memberCode]);
-                    $this->memberRepository->saveMember($member);
-                }
-                $members[$memberCode] = $member;
-            }
-        }
-
-        if (!empty($members)) {
-            $this->memberRepository->flushMembers();
-        }
-
-        if (!empty($providers)) {
-            $this->providerRepository->flushProviders();
-        }
-
-        if (!empty($documents)) {
-            $this->documentRepository->flushDocuments();
-        }
-
-        $this->memberRepository->clearMembers();
-        $this->providerRepository->clearProviders();
-        $this->documentRepository->clearDocuments();
+        return $file;
     }
 
     private function getSanitizedLine(int $lineNumber, array $line): array
@@ -310,5 +277,87 @@ class ParseFacturationCommand extends Command
         }
 
         return $sanitizedLine;
+    }
+
+    private function endOfChunk($linesToSave, $chunkSize): bool
+    {
+        return count($linesToSave) % $chunkSize === 0;
+    }
+
+    private function saveLines(array $lines): void
+    {
+        $members = [];
+        $providers = [];
+        $documents = [];
+
+        foreach ($lines as $line) {
+            [
+                $providerCode,
+                $documentNumber,
+                $memberCode,
+                $documentType,
+                $htProduct,
+                $vatProduct,
+                $htTransport,
+                $vatTransport,
+                $totalTtc
+            ] = $line;
+
+            $document = $this->documentRepository->findOneBy(['number' => $documentNumber]);
+            if ($document !== null) {
+                continue;
+            }
+            $document = new Document();
+            $document
+                ->setType($documentType)
+                ->setNumber($documentNumber)
+                ->setHtProduct($htProduct)
+                ->setVatProduct($vatProduct)
+                ->setHtTransport($htTransport)
+                ->setVatTransport($vatTransport)
+                ->setTotalTtc($totalTtc);
+            $this->documentRepository->saveDocument($document);
+            $documents[] = $document;
+
+            if (!array_key_exists($providerCode, $providers)) {
+                $provider = $this->providerRepository->findOneBy(['code' => $providerCode]);
+                if ($provider === null) {
+                    $provider = new Provider();
+                    $provider
+                        ->setCode($providerCode)
+                        ->setName($this->providers[$providerCode]);
+                    $this->providerRepository->saveProvider($provider);
+                }
+                $providers[$providerCode] = $provider;
+            }
+
+            if (!array_key_exists($memberCode, $members)) {
+                $member = $this->memberRepository->findOneBy(['code' => $memberCode]);
+                if ($member === null) {
+                    $member = new Member();
+                    $member
+                        ->setCode($memberCode)
+                        ->setName($this->members[$memberCode]);
+                    $this->memberRepository->saveMember($member);
+                }
+                $members[$memberCode] = $member;
+            }
+        }
+
+        if (!empty($members)) {
+            $this->memberRepository->flushMembers();
+        }
+
+        if (!empty($providers)) {
+            $this->providerRepository->flushProviders();
+        }
+
+        if (!empty($documents)) {
+            $this->documentRepository->flushDocuments();
+        }
+
+        $this->memberRepository->clearMembers();
+        $this->providerRepository->clearProviders();
+        $this->documentRepository->clearDocuments();
     }
 }
