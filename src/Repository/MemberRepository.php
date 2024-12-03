@@ -16,9 +16,21 @@ class MemberRepository extends ServiceEntityRepository
         parent::__construct($registry, Member::class);
     }
 
-    public function saveMember(Member $member): void
+    public function saveMember(Member $member, bool $flush = false): void
     {
         $this->getEntityManager()->persist($member);
+        if ($flush) {
+            $this->getEntityManager()->flush();
+        }
+    }
+
+    public function flushMembers(): void
+    {
         $this->getEntityManager()->flush();
+    }
+
+    public function clearMembers(): void
+    {
+        $this->getEntityManager()->clear();
     }
 }

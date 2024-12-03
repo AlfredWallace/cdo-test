@@ -16,9 +16,21 @@ class ProviderRepository extends ServiceEntityRepository
         parent::__construct($registry, Provider::class);
     }
 
-    public function saveProvider(Provider $provider): void
+    public function saveProvider(Provider $provider, bool $flush = false): void
     {
         $this->getEntityManager()->persist($provider);
+        if ($flush) {
+            $this->getEntityManager()->flush();
+        }
+    }
+
+    public function flushProviders(): void
+    {
         $this->getEntityManager()->flush();
+    }
+
+    public function clearProviders(): void
+    {
+        $this->getEntityManager()->clear();
     }
 }
