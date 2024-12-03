@@ -20,6 +20,8 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\Filesystem\Filesystem;
 
 #[AsCommand(
     name: 'app:parse-facturation',
@@ -32,14 +34,20 @@ class ParseFacturationCommand extends Command
 
     private array $providers = [];
     private array $members = [];
+    private readonly string $errorFilePath;
 
     public function __construct(
         private readonly DocumentRepository $documentRepository,
+        private readonly Filesystem $filesystem,
         private readonly MemberFetcher $memberFetcher,
         private readonly MemberRepository $memberRepository,
         private readonly ProviderFetcher $providerFetcher,
         private readonly ProviderRepository $providerRepository,
+
+        #[Autowire('%kernel.project_dir%')]
+        string $projectDir
     ) {
+        $this->errorFilePath = $projectDir . DIRECTORY_SEPARATOR . '/var/app_parse_facturation_errors.csv';
         parent::__construct();
     }
 
@@ -53,6 +61,11 @@ class ParseFacturationCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
+        if ($this->filesystem->exists($this->errorFilePath)) {
+            $this->filesystem->remove($this->errorFilePath);
+        }
+        $this->filesystem->dumpFile($this->errorFilePath, "");
+
         $io = new SymfonyStyle($input, $output);
 
         try {
@@ -122,7 +135,7 @@ class ParseFacturationCommand extends Command
                     $linesToSave = [];
                 }
             } catch (\Throwable $exception) {
-                // todo write error file
+                $this->filesystem->appendToFile($this->errorFilePath, $exception->getMessage() . PHP_EOL);
                 continue;
             }
         }
